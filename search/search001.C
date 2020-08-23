@@ -164,15 +164,24 @@ void search001(const double lo = 749, const double hi = 751,
   const int nTotalBins = (freq_hi-freq_lo)/bandwidth;
   TH1F* hGrand = new TH1F("hGrand","Grand spectrum",
 			  nTotalBins, freq_lo, freq_hi);
-
+  hGrand->SetXTitle("Frequency [MHz]");
+  hGrand->SetYTitle("Power [10^{-22} Watts]");
+  TH1F* htotal[nTrials];
+  
   TH1F* hsig[nTrials][nSteps];
   TH1F* hbkg[nTrials][nSteps];
   TH1F* hmea[nTrials][nSteps];
 
   // writing example output file
-  TFile* outFile = new TFile("sim_search001.root","recreate");
+  string endstring = narrow? "_narrow":"_wide";
+  TFile* outFile = new TFile(Form("sim_search001%s.root",endstring.data()),"recreate");
   
   for(unsigned int itrial=0; itrial < nTrials; itrial++){
+
+    htotal[itrial]=(TH1F*)hGrand->Clone(Form("htotal%03d",itrial));
+    double delta_sum[nTotalBins];
+    double weight_sum[nTotalBins];      
+    for(int ib=0;ib<nTotalBins;ib++){delta_sum[ib]=0; weight_sum[ib]=0;}
 
     // first random peak a signal frequency
     double f_axion = lo + (hi-lo)*gRandom->Rndm();
@@ -225,15 +234,36 @@ void search001(const double lo = 749, const double hi = 751,
       hmea[itrial][istep]->Add(hsig[itrial][istep],
 			       hbkg[itrial][istep]);
       
-      if(f_axion < end_freq){
+      if(f_axion < end_freq && debug){
 	nSpectra++;
 	hsig[itrial][istep]->Write();
       }
-      hbkg[itrial][istep]->Write();
+      if(debug)hbkg[itrial][istep]->Write();
       hmea[itrial][istep]->Write();
+
+      fsig->SetParameter(0,resFreq);
+      for(int ib=1; ib <= nBins; ib++){
+	double binCenter = hmea[itrial][istep]->GetBinCenter(ib);
+	int binGrand = hGrand->FindBin(binCenter);
+	double w = fsig->Eval(binCenter)/pow(sigmaN[istep],2);
+
+	weight_sum[binGrand-1] += w;
+	delta_sum[binGrand-1] += w*hmea[itrial][istep]->GetBinContent(ib);
+      }
+      
 	
     } // end of loop over steps of frequency
 
+    // fill the measured grand spectrum with weighted average
+    for(int ib=1; ib<= nTotalBins; ib++){
+      if(debug)cout << "delta_sum " << ib << " = " <<  delta_sum[ib-1] << endl;
+      if(debug)cout << "weight_sum " << ib << " = " <<  weight_sum[ib-1] << endl;
+      if(weight_sum[ib]<1e-10)continue;
+      double normalized = delta_sum[ib-1]/weight_sum[ib-1];
+      if(debug)cout << "normalized " << ib << " = " << normalized << endl;
+      htotal[itrial]->SetBinContent(ib, normalized);
+    }
+    htotal[itrial]->Write();
   } // end of loop over trials
 
 
