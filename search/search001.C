@@ -21,15 +21,15 @@ using namespace std;
 
 const double c = 3e5; // in km/s
 const double eta = 1;
-const double baseline = 1.52; // (*1e-21)
+const double baseline = 3.0; // (*1e-22)
 const double QL = 70000;
 const double S11 = 0;
-const double Tsys = 4; // in Kelvin
+const double Tsys = 5.6; // in Kelvin
 const double bandwidth = 125e-6; //  in MHz, 125 Hz
-const double kB = 1.38e-2; // ( *1e-21)
-const double integration_time = 80; // in seconds
+const double kB = 1.38e-1; // ( *1e-22)
+//const double integration_time = 80; // in seconds
 const int N_integral = 10000;
-const double sigma_noise = kB*Tsys*bandwidth/sqrt(N_integral); // for each bin
+const double sigma_noise = kB*Tsys*bandwidth*1e6/sqrt(N_integral); // for each bin
 const double rangeSpec = 50e-3; // 50 kHz
 const int nBins = rangeSpec/bandwidth;
 const double step_size = 2e-3; // in MHz, 2 kHz
@@ -69,7 +69,9 @@ double maxwell_boltzmann(double x)
 // 4. Weight each spectrum
 // 5. Add to get signal/noise ratio and see if we could find a signal
 
-void search001(const double lo = 745, const double hi = 755, const unsigned int nTrials=1, bool debug=false)
+void search001(const double lo = 749, const double hi = 751,
+	       bool narrow=false,
+	       const unsigned int nTrials=1, bool debug=false)
 {
 
   if(S11 > 1 || fabs(S11-1)<1e-6 || S11 < 0) FATAL("S11 should be between 0 and 1");
@@ -80,13 +82,14 @@ void search001(const double lo = 745, const double hi = 755, const unsigned int 
 
   cout << "Preparing a study with " << nTrials << " trials and ";
   cout << nSteps << " steps of frequency changes" << endl;
+  cout << "sigma of noise is " << sigma_noise << endl;
   cout << "Grand spectrum frequency range is " <<
     freq_lo << " -- " << freq_hi << " MHz" << endl;
   
   TF1* fsig = new TF1("fsig", P_exp, freq_lo, freq_hi, 1);
   fsig->SetNpx(2500);
 
-  TF1* fspeed = new TF1("fspeed","maxwell_boltzmann(x)",0,1000);
+  TF1* fspeed = new TF1("fspeed","maxwell_boltzmann(x)",0,10000);
 
   TRandom3* gRandom= new TRandom3();
   const int nTotalBins = (freq_hi-freq_lo)/bandwidth;
@@ -115,7 +118,7 @@ void search001(const double lo = 745, const double hi = 755, const unsigned int 
     int startStepBin=-1;
     
     for(unsigned int istep=0; istep<nSteps; istep++){
-    //    for(unsigned int istep=0; nSpectra<1; istep++){
+    //    for(unsigned int istep=0; nSpectra<2; istep++){
 
       start_freq = freq_lo + istep*step_size;
       end_freq   = start_freq + rangeSpec;
@@ -126,9 +129,17 @@ void search001(const double lo = 745, const double hi = 755, const unsigned int 
 
       TH1F* htemp = new TH1F("htemp","template of frequency",
 			     nBins, start_freq, end_freq);
+      htemp->SetXTitle("Frequency [MHz]");
+      htemp->SetYTitle("Power [10^{-22} W]");
+
       hsig[itrial][istep] = (TH1F*)htemp->Clone(Form("hsig%02d%04d",itrial,istep));
+      hsig[itrial][istep] -> SetTitle(Form("Signal for trial %02d and frequency step %04d",itrial,istep));
+
       hbkg[itrial][istep] = (TH1F*)htemp->Clone(Form("hbkg%02d%04d",itrial,istep));
+      hbkg[itrial][istep] -> SetTitle(Form("Background for trial %02d and frequency step %04d",itrial,istep));
+
       hmea[itrial][istep] = (TH1F*)htemp->Clone(Form("hmea%02d%04d",itrial,istep));
+      hmea[itrial][istep] -> SetTitle(Form("Measured for trial %02d and frequency step %04d",itrial,istep));
 
       
       // if axion signal frequency is higher than the highest frequency of
@@ -150,21 +161,46 @@ void search001(const double lo = 745, const double hi = 755, const unsigned int 
       // find the first bin of axion signal in this spectrum
       // binStart could be equal to zero
       const unsigned int binStart = hsig[itrial][istep]->FindBin(f_axion);
+      if(debug) cout << "binStart = " << binStart << endl;
+      double binlo = f_axion;
+      double binhi = hsig[itrial][istep] ->GetBinLowEdge(binStart+1);
+      if(debug)cout << "binlo = " << binlo << "\t binhi = " << binhi << endl;
 
+      // if assuming narrow distribution
+      if(narrow)hsig[itrial][istep]->SetBinContent(binStart,power_sig);
+      // if assuming a maxwell distribution
+      else{
       
-      // set signal power for every bin
-      double sum_prob = 0;
-      for(int ib=binStart; ib <= nBins; ib++){
-
-	double vlo = c*(ib-binStart)*bandwidth/f_axion;
-	double vhi = c*(ib+1-binStart)*bandwidth/f_axion;
-
+	// set signal power for every bin, assuming maxwell distribution
+	double vlo=0;
+	double vhi=c*sqrt(binhi/f_axion-1);
+	if(debug)cout << "vlo = " << vlo << "\t vhi = " << vhi << endl;
 	double prob = fspeed->Integral(vlo,vhi);
-	sum_prob += prob; 
-	double power_for_this_bin = power_sig * prob;
-	hsig[itrial][istep]->SetBinContent(ib, power_for_this_bin);
-      } // end of loop over nBins
+	double sum_prob = prob;
+	double sum_signal_power = power_sig*prob;
+	for(int ib=binStart+1; ib <= nBins; ib++){
 
+	  binlo = hsig[itrial][istep] ->GetBinLowEdge(ib);
+	  binhi = hsig[itrial][istep] ->GetBinLowEdge(ib+1);
+	  if(debug)cout << "binlo = " << binlo << "\t binhi = " << binhi << endl;
+	
+	  vlo = c*sqrt(binlo/f_axion-1);
+	  vhi = c*sqrt(binhi/f_axion-1);
+	  if(debug)cout << "vlo = " << vlo << "\t vhi = " << vhi << endl;
+	  double prob = fspeed->Integral(vlo,vhi);
+	  sum_prob += prob; 
+	  double power_for_this_bin = power_sig * prob;
+	  sum_signal_power += power_for_this_bin;
+	
+	  hsig[itrial][istep]->SetBinContent(ib, power_for_this_bin);
+	
+
+	} // end of loop over nBins
+
+	if(debug)cout << "sum of probability is " << sum_prob << endl;
+	if(debug)cout << "sum of signal power is " << sum_signal_power << endl;
+      } // if use a wider distribution
+      
       // now generate background spectrum
 
       for(int ib=1; ib <= nBins; ib++){
