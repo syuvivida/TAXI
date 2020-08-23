@@ -8,6 +8,7 @@
 #include <iostream>
 #include <string>
 #include <fstream>
+#include <TCanvas.h>
 
 // a program to search for axion using numbers of Ed Daw
 // assuming a maxwell-boltzmann distribution for signal
@@ -159,6 +160,9 @@ void search001(const double lo = 749, const double hi = 751,
 
   double sigmaN[nSteps];
   for(unsigned int is=0; is<nSteps; is++)sigmaN[is]=sigma_noise;
+
+  TCanvas* c1 = new TCanvas("c1");
+
   
   TRandom3* gRandom= new TRandom3();
   const int nTotalBins = (freq_hi-freq_lo)/bandwidth;
@@ -209,14 +213,14 @@ void search001(const double lo = 749, const double hi = 751,
       htemp->SetXTitle("Frequency [MHz]");
       htemp->SetYTitle("Power [10^{-22} W]");
 
-      hsig[itrial][istep] = (TH1F*)htemp->Clone(Form("hsig%02d%04d",itrial,istep));
-      hsig[itrial][istep] -> SetTitle(Form("Signal for trial %02d and frequency step %04d",itrial,istep));
+      hsig[itrial][istep] = (TH1F*)htemp->Clone(Form("hsig%03d%04d",itrial,istep));
+      hsig[itrial][istep] -> SetTitle(Form("Signal for trial %03d and frequency step %04d",itrial,istep));
 
-      hbkg[itrial][istep] = (TH1F*)htemp->Clone(Form("hbkg%02d%04d",itrial,istep));
-      hbkg[itrial][istep] -> SetTitle(Form("Background for trial %02d and frequency step %04d",itrial,istep));
+      hbkg[itrial][istep] = (TH1F*)htemp->Clone(Form("hbkg%03d%04d",itrial,istep));
+      hbkg[itrial][istep] -> SetTitle(Form("Background for trial %03d and frequency step %04d",itrial,istep));
 
-      hmea[itrial][istep] = (TH1F*)htemp->Clone(Form("hmea%02d%04d",itrial,istep));
-      hmea[itrial][istep] -> SetTitle(Form("Measured for trial %02d and frequency step %04d",itrial,istep));
+      hmea[itrial][istep] = (TH1F*)htemp->Clone(Form("hmea%03d%04d",itrial,istep));
+      hmea[itrial][istep] -> SetTitle(Form("Measured for trial %03d and frequency step %04d",itrial,istep));
 
 
       // now generate background spectrum
@@ -237,10 +241,19 @@ void search001(const double lo = 749, const double hi = 751,
       if(f_axion < end_freq && debug){
 	nSpectra++;
 	hsig[itrial][istep]->Write();
-      }
-      if(debug)hbkg[itrial][istep]->Write();
-      hmea[itrial][istep]->Write();
+	hsig[itrial][istep]->Draw();
+	c1->Print(Form("hsig%03d%04d.png",itrial,istep));
+      // }
+      // if(debug){
+	hbkg[itrial][istep]->Write();
+	hbkg[itrial][istep]->Draw();
+	c1->Print(Form("hbkg%03d%04d.png",itrial,istep));
+      // }
 
+      hmea[itrial][istep]->Write();
+      hmea[itrial][istep]->Draw();
+      c1->Print(Form("hmea%03d%04d.png",itrial,istep));
+      }
       fsig->SetParameter(0,resFreq);
       for(int ib=1; ib <= nBins; ib++){
 	double binCenter = hmea[itrial][istep]->GetBinCenter(ib);
@@ -264,6 +277,9 @@ void search001(const double lo = 749, const double hi = 751,
       htotal[itrial]->SetBinContent(ib, normalized);
     }
     htotal[itrial]->Write();
+    htotal[itrial]->Draw();
+    c1->Print(Form("htotal%03d.png",itrial));
+    
   } // end of loop over trials
 
 
