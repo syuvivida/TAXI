@@ -64,14 +64,16 @@ double maxwell_boltzmann(double x)
 double P_exp_boltzmann(double* x, double* par)
 {
   double f_vary = x[0];
-  double f0 = par[0];
+  double f0 = par[0]; // resonance frequency
   double faxion = par[1];
   double deltaf = fabs(f_vary-faxion);
-  //  double v = c*sqrt(2*deltaf/faxion);
-  double v = c*sqrt(deltaf/faxion);
+  double v = c*sqrt(2*deltaf/faxion);
+  
+  // the factor c*c/v/faxion comes from the transformation of variables
+  
   double Power =  //baseline * (f0/750.) * (1-2*S11)/(1-S11) *
     //    (1/(1+4*QL*QL*pow(f_vary/f0-1,2))) * eta *
-    maxwell_boltzmann(v);  
+    maxwell_boltzmann(v)*(c*c/v/faxion);
   return Power;
 }
 
@@ -120,7 +122,7 @@ void generate_signal(bool narrow, bool debug, TH1F* hsig,
     
     double binlo = f_axion;
     double binhi = hsig ->GetBinLowEdge(binStart+1);
-    if(debug)
+    //    if(debug)
       cout <<  "binlo = " << setprecision(10) << binlo << "\t binhi = "
 	   << setprecision(10) <<binhi << endl;
 
@@ -135,18 +137,19 @@ void generate_signal(bool narrow, bool debug, TH1F* hsig,
       binlo = hsig->GetBinLowEdge(ib);
       binhi = hsig->GetBinLowEdge(ib+1);
       if(debug)
-	cout << "binlo = " << setprecision(10) << binlo <<
-	  "\t binhi = " << setprecision(10) << binhi << endl;
-	
+    	cout << "binlo = " << setprecision(10) << binlo <<
+    	  "\t binhi = " << setprecision(10) << binhi << endl;
+    	
       //   double power_for_this_bin = fsig_wide->Integral(binlo,binhi)/bandwidth;
       double power_for_this_bin = fsig_wide->Integral(binlo,binhi);
       //      cout << "power for this bin = " << power_for_this_bin  << endl;
       sum_signal_power += power_for_this_bin;	
       hsig->SetBinContent(ib, power_for_this_bin);
-	
+    	
     } // end of loop over nBins
 
       // if(debug)
+    cout << "resFreq = " << setprecision(10) << resFreq << "\t faxion = " << setprecision(10) << f_axion << endl;
       cout << "sum of signal power is " << sum_signal_power << endl;
   } // if use a wider distribution
   return;
@@ -278,7 +281,7 @@ void search001(const double lo = 749, const double hi = 751,
       hmea[itrial][istep]->Add(hsig[itrial][istep],
 			       hbkg[itrial][istep]);
       
-      if(f_axion < end_freq && debug){
+      if(f_axion < end_freq){
 	nSpectra++;
 	hsig[itrial][istep]->Write();
 	hsig[itrial][istep]->Draw();
