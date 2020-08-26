@@ -1,3 +1,4 @@
+#include <TCanvas.h>
 #include <TRandom3.h>
 #include <TSystem.h>
 #include <TProfile.h>
@@ -7,16 +8,17 @@
 #include <TF1.h>
 #include <iostream>
 #include <string>
+#include <iomanip>
 #include <fstream>
-#include <TCanvas.h>
 
-// a program to search for axion using numbers of Ed Daw
-// assuming a maxwell-boltzmann distribution for signal
-// assume the frequency bin width is narrower than the signal
+// a program to search for axion using numbers of Ed Daw 1807.09369
+// assuming a maxwell-boltzmann distribution for signal by default
+// If the "narrow" option is turned on, the signal power is deposited in one bin
 
 using namespace std;
 
-// Pout_original = 1.52e-21 W [ V/220L * B/7.6T * B/7.6T* Cnlm * g_gamma/0.97*g_gamma/0.97 * rhoa /0.45 * f0/750MHz * Q/70000]
+// Pout_original = 3.0e-22 W [ V/220L * B/7.6T * B/7.6T* Cnlm *
+//                 g_gamma/0.97*g_gamma/0.97 * rhoa /0.45 * f0/750MHz * Q/70000]
 // corr Pout =
 // Pout_original * (1-2S11)/(1-S11)/(1+4Q^2(f/f0-1)^2)] *eta
 
@@ -51,13 +53,30 @@ double P_exp(double* x, double* par)
 }
 
 
-
 double maxwell_boltzmann(double x)
 {
   double v = 226;
   double func = 4*TMath::Pi()*x*x/pow(v*v*TMath::Pi(),1.5)*TMath::Exp(-x*x/v/v);
   return func;
 }
+
+
+double P_exp_boltzmann(double* x, double* par)
+{
+  double f_vary = x[0];
+  double f0 = par[0]; // resonance frequency
+  double faxion = par[1];
+  double deltaf = fabs(f_vary-faxion);
+  double v = c*sqrt(2*deltaf/faxion);
+  
+  // the factor c*c/v/faxion comes from the transformation of variables
+  
+  double Power =  baseline * (f0/750.) * (1-2*S11)/(1-S11) *
+    (1/(1+4*QL*QL*pow(f_vary/f0-1,2))) * eta *
+    maxwell_boltzmann(v)*(c*c/v/faxion);
+  return Power;
+}
+
 
 void generate_background(TH1F* hbkg, const double sigma)
 {
@@ -69,75 +88,80 @@ void generate_background(TH1F* hbkg, const double sigma)
   return;
 }
 
-void generate_signal(bool narrow, bool debug, TH1F* hsig, TF1* fsig, TF1* fspeed, const double f_axion,
+void generate_signal(bool narrow, bool debug, TH1F* hsig,
+		     TF1* fsig, TF1* fsig_wide,
+		     const double f_axion,
 		     const double resFreq, const double end_freq)
 {
+  // if axion signal frequency is higher than the highest frequency of
+  // this spectrum, skip to the next resonance frequency
+  
   if(f_axion > end_freq)return;
-  fsig->SetParameter(0,resFreq);
-  // signal power for a given axion frequency and cavity resonance frequency
-  double power_sig = fsig->Eval(f_axion); 
-  if(debug)
-    cout << "power signal " <<  power_sig << endl;      
 
+  fsig->SetParameter(0,resFreq);
+
+  fsig_wide->SetParameter(0,resFreq);
+  fsig_wide->SetParameter(1,f_axion);
+  
   // first generate signal
   // find the first bin of axion signal in this spectrum
   // binStart could be equal to zero
   const unsigned int binStart = hsig->FindBin(f_axion);
   if(debug) cout << "binStart = " << binStart << endl;
-  double binlo = f_axion;
-  double binhi = hsig ->GetBinLowEdge(binStart+1);
-  if(debug)cout << "binlo = " << binlo << "\t binhi = " << binhi << endl;
 
   // if assuming narrow distribution
-  if(narrow)hsig->SetBinContent(binStart,power_sig);
+  if(narrow){
+    // signal power for a given axion frequency and cavity resonance frequency
+    double power_sig = fsig->Eval(f_axion); 
+    hsig->SetBinContent(binStart,power_sig);
+    if(debug) cout << "power signal " <<  power_sig << endl;      
+  }
   // if assuming a maxwell distribution
   else{
-    // set signal power for every bin, assuming maxwell distribution
-    double vlo=0;
-    double vhi=c*sqrt(binhi/f_axion-1);
-    if(debug)cout << "vlo = " << vlo << "\t vhi = " << vhi << endl;
-    double prob = fspeed->Integral(vlo,vhi);
-    double sum_prob = prob;
-    double sum_signal_power = power_sig*prob;
-    for(int ib=binStart+1; ib <= nBins; ib++){
+    
+    double sum_signal_power = 0;
+    
+    for(unsigned int ib=binStart; ib <= nBins; ib++){
 
-      binlo = hsig->GetBinLowEdge(ib);
-      binhi = hsig->GetBinLowEdge(ib+1);
-      if(debug)cout << "binlo = " << binlo << "\t binhi = " << binhi << endl;
-	
-      vlo = c*sqrt(binlo/f_axion-1);
-      vhi = c*sqrt(binhi/f_axion-1);
-      if(debug)cout << "vlo = " << vlo << "\t vhi = " << vhi << endl;
-      double prob = fspeed->Integral(vlo,vhi);
-      sum_prob += prob; 
-      double power_for_this_bin = power_sig * prob;
-      sum_signal_power += power_for_this_bin;
-	
+      double binlo = (ib==binStart)? f_axion: hsig->GetBinLowEdge(ib);
+      double binhi = hsig->GetBinLowEdge(ib+1);
+      if(debug)
+	cout << "binlo = " << setprecision(10) << binlo <<
+    	  "\t binhi = " << setprecision(10) << binhi << endl;
+    	
+      // set signal power for every bin, assuming maxwell distribution
+      double power_for_this_bin = fsig_wide->Integral(binlo,binhi);
       hsig->SetBinContent(ib, power_for_this_bin);
-	
+      sum_signal_power += power_for_this_bin;	
 
+      if(debug) cout << "power for this bin = " << power_for_this_bin  << endl;
+    	
     } // end of loop over nBins
 
-    if(debug)cout << "sum of probability is " << sum_prob << endl;
-    if(debug)cout << "sum of signal power is " << sum_signal_power << endl;
+    if(debug) cout << "sum of signal power is " << sum_signal_power << endl;
   } // if use a wider distribution
   return;
 }
 		     
 
 // frequency discussed here is in GHz, and the power is expressed
-// in terms of noise power kB*T*bandwidth
-// 
+// with a unit of 1e-22 W
+//
+// 0. Generate noise power spectrum with sigma= kT*b/sqrt(N)
 // 1. Generate fake data that contains an axion signal with some
-// random frequency between 4.5 and 5.5 GHz
+// random frequency between 749 and 751 MHz
 // 2. Overlay the signal with background from thermal noise
 // 3. Sum of signal and background is the measured spectrum
 // 4. Weight each spectrum
 // 5. Add to get signal/noise ratio and see if we could find a signal
+//
+// The full scanning range is lo-25 kHz to hi + 25 kHz
 
-void search001(const double lo = 749, const double hi = 751,
-	       bool narrow=false,
-	       const unsigned int nTrials=1, bool debug=false)
+void search001(bool narrow=false,
+	       bool debug=false,
+	       bool changeSeed=false,
+	       const unsigned int nTrials=1, 
+	       const double lo = 749, const double hi = 751)
 {
 
   if(S11 > 1 || fabs(S11-1)<1e-6 || S11 < 0) FATAL("S11 should be between 0 and 1");
@@ -155,16 +179,15 @@ void search001(const double lo = 749, const double hi = 751,
   TF1* fsig = new TF1("fsig", P_exp, freq_lo, freq_hi, 1);
   fsig->SetNpx(2500);
 
-  TF1* fspeed = new TF1("fspeed","maxwell_boltzmann(x)",0,10000);
+  TF1* fsig_wide = new TF1("fsig_wide", P_exp_boltzmann,
+			   freq_lo, freq_hi, 2);
+  fsig_wide->SetNpx(2500);
 
 
   double sigmaN[nSteps];
   for(unsigned int is=0; is<nSteps; is++)sigmaN[is]=sigma_noise;
 
-  TCanvas* c1 = new TCanvas("c1");
-
   
-  TRandom3* gRandom= new TRandom3();
   const int nTotalBins = (freq_hi-freq_lo)/bandwidth;
   TH1F* hGrand = new TH1F("hGrand","Grand spectrum",
 			  nTotalBins, freq_lo, freq_hi);
@@ -176,10 +199,19 @@ void search001(const double lo = 749, const double hi = 751,
   TH1F* hbkg[nTrials][nSteps];
   TH1F* hmea[nTrials][nSteps];
 
+  TCanvas* c1 = new TCanvas("c1");
+  // random number generators
+  TString number = gSystem->GetFromPipe("./random.sh");
+  UInt_t seed=number.Atoll();
+  if(debug) cout << number << "\t" << seed << endl;
+  TRandom3* gRandom= changeSeed? new TRandom3(seed): new TRandom3();
+
   // writing example output file
   string endstring = narrow? "_narrow":"_wide";
-  TFile* outFile = new TFile(Form("sim_search001%s.root",endstring.data()),"recreate");
-  
+  TFile* outFile = new TFile(Form("sim_search001%s.root",endstring.data()),
+			     "recreate");
+
+    
   for(unsigned int itrial=0; itrial < nTrials; itrial++){
 
     htotal[itrial]=(TH1F*)hGrand->Clone(Form("htotal%03d",itrial));
@@ -189,72 +221,80 @@ void search001(const double lo = 749, const double hi = 751,
 
     // first random peak a signal frequency
     double f_axion = lo + (hi-lo)*gRandom->Rndm();
-    if(debug)
-      cout << "search for a signal with frequency = " << f_axion
-		<< " MHz" << endl;
+    cout << "search for a signal with frequency = " << f_axion
+	 << " MHz" << endl;
     // now start stepping frequency in size of step_size
 
-    double start_freq;
-    double end_freq;
     unsigned int nSpectra=0;
     
     for(unsigned int istep=0; istep<nSteps; istep++){
-    //    for(unsigned int istep=0; nSpectra<2; istep++){
+    //    for(unsigned int istep=0; nSpectra<4; istep++){
 
-      start_freq = freq_lo + istep*step_size;
-      end_freq   = start_freq + rangeSpec;
+      double start_freq = freq_lo + istep*step_size;
+      double end_freq   = start_freq + rangeSpec;
 
       if(debug)
 	cout << "start:end frequencies = " << start_freq << "\t"
 	     << end_freq << endl;
 
-      TH1F* htemp = new TH1F("htemp","template of frequency",
+      TH1F* htemp = new TH1F(Form("htemp%03d%04d",itrial,istep),
+			     "template of frequency",
 			     nBins, start_freq, end_freq);
       htemp->SetXTitle("Frequency [MHz]");
       htemp->SetYTitle("Power [10^{-22} W]");
 
-      hsig[itrial][istep] = (TH1F*)htemp->Clone(Form("hsig%03d%04d",itrial,istep));
-      hsig[itrial][istep] -> SetTitle(Form("Signal for trial %03d and frequency step %04d",itrial,istep));
+      hsig[itrial][istep] = (TH1F*)htemp->Clone(Form("hsig%03d%04d",
+						     itrial,istep));
+      hsig[itrial][istep] -> SetTitle(Form("Signal for trial %03d and"
+					   " frequency step %04d",
+					   itrial,istep));
 
-      hbkg[itrial][istep] = (TH1F*)htemp->Clone(Form("hbkg%03d%04d",itrial,istep));
-      hbkg[itrial][istep] -> SetTitle(Form("Background for trial %03d and frequency step %04d",itrial,istep));
+      hbkg[itrial][istep] = (TH1F*)htemp->Clone(Form("hbkg%03d%04d",
+						     itrial,istep));
+      hbkg[itrial][istep] -> SetTitle(Form("Background for trial %03d and "
+					   "frequency step %04d",itrial,istep));
 
-      hmea[itrial][istep] = (TH1F*)htemp->Clone(Form("hmea%03d%04d",itrial,istep));
-      hmea[itrial][istep] -> SetTitle(Form("Measured for trial %03d and frequency step %04d",itrial,istep));
+      hmea[itrial][istep] = (TH1F*)htemp->Clone(Form("hmea%03d%04d",
+						     itrial,istep));
+      hmea[itrial][istep] -> SetTitle(Form("Measured for trial %03d and "
+					   "frequency step %04d",itrial,istep));
 
 
       // now generate background spectrum
       generate_background(hbkg[itrial][istep], sigmaN[istep]);
 
       
-      // if axion signal frequency is higher than the highest frequency of
-      // this spectrum, skip to the next resonance frequency
       double resFreq = start_freq + 0.5*rangeSpec;
-      if(debug)
-	cout << "resonance frequency = " <<  resFreq << endl;      
-      generate_signal(narrow, debug, hsig[itrial][istep], fsig, fspeed, f_axion, resFreq, end_freq);
+      if(debug) cout << "resonance frequency = " <<  resFreq << endl;
+      
+      generate_signal(narrow, debug, hsig[itrial][istep], fsig, fsig_wide,
+		      f_axion, resFreq, end_freq);
       
       // add signal and background generation to get measured spectrum
       hmea[itrial][istep]->Add(hsig[itrial][istep],
 			       hbkg[itrial][istep]);
       
-      if(f_axion < end_freq && debug){
+      if(f_axion < end_freq){
 	nSpectra++;
-	hsig[itrial][istep]->Write();
-	hsig[itrial][istep]->Draw();
-	c1->Print(Form("hsig%03d%04d.png",itrial,istep));
-      // }
-      // if(debug){
-	hbkg[itrial][istep]->Write();
-	hbkg[itrial][istep]->Draw();
-	c1->Print(Form("hbkg%03d%04d.png",itrial,istep));
-      // }
-
-      hmea[itrial][istep]->Write();
-      hmea[itrial][istep]->Draw();
-      c1->Print(Form("hmea%03d%04d.png",itrial,istep));
+	if(debug){
+	  hsig[itrial][istep]->Write();
+	  hsig[itrial][istep]->Draw();
+	  c1->Print(Form("hsig%03d%04d.png",itrial,istep));
+	  hbkg[itrial][istep]->Write();
+	  hbkg[itrial][istep]->Draw();
+	  c1->Print(Form("hbkg%03d%04d.png",itrial,istep));
+	  hmea[itrial][istep]->Write();
+	  hmea[itrial][istep]->Draw();
+	  c1->Print(Form("hmea%03d%04d.png",itrial,istep));
+	}
       }
+
+
+      // compute grand spectrum by adding spectra that overlapped frequencies
+      // assumed signal here is narrow signal
+      
       fsig->SetParameter(0,resFreq);
+      
       for(int ib=1; ib <= nBins; ib++){
 	double binCenter = hmea[itrial][istep]->GetBinCenter(ib);
 	int binGrand = hGrand->FindBin(binCenter);
@@ -269,11 +309,11 @@ void search001(const double lo = 749, const double hi = 751,
 
     // fill the measured grand spectrum with weighted average
     for(int ib=1; ib<= nTotalBins; ib++){
-      if(debug)cout << "delta_sum " << ib << " = " <<  delta_sum[ib-1] << endl;
-      if(debug)cout << "weight_sum " << ib << " = " <<  weight_sum[ib-1] << endl;
+      if(debug) cout << "delta_sum " << ib << " = " <<  delta_sum[ib-1] << endl;
+      if(debug) cout << "weight_sum " << ib << " = " <<  weight_sum[ib-1] << endl;
       if(weight_sum[ib]<1e-10)continue;
       double normalized = delta_sum[ib-1]/weight_sum[ib-1];
-      if(debug)cout << "normalized " << ib << " = " << normalized << endl;
+      if(debug) cout << "normalized " << ib << " = " << normalized << endl;
       htotal[itrial]->SetBinContent(ib, normalized);
     }
     htotal[itrial]->Write();
