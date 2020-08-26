@@ -13,7 +13,7 @@
 
 // a program to search for axion using numbers of Ed Daw 1807.09369
 // assuming a maxwell-boltzmann distribution for signal by default
-// If the "narrow" option is turned on, signal power is deposited in one bin
+// If the "narrow" option is turned on, the signal power is deposited in one bin
 
 using namespace std;
 
@@ -71,8 +71,8 @@ double P_exp_boltzmann(double* x, double* par)
   
   // the factor c*c/v/faxion comes from the transformation of variables
   
-  double Power =  //baseline * (f0/750.) * (1-2*S11)/(1-S11) *
-    //    (1/(1+4*QL*QL*pow(f_vary/f0-1,2))) * eta *
+  double Power =  baseline * (f0/750.) * (1-2*S11)/(1-S11) *
+    (1/(1+4*QL*QL*pow(f_vary/f0-1,2))) * eta *
     maxwell_boltzmann(v)*(c*c/v/faxion);
   return Power;
 }
@@ -114,43 +114,31 @@ void generate_signal(bool narrow, bool debug, TH1F* hsig,
     // signal power for a given axion frequency and cavity resonance frequency
     double power_sig = fsig->Eval(f_axion); 
     hsig->SetBinContent(binStart,power_sig);
-    if(debug)
-      cout << "power signal " <<  power_sig << endl;      
+    if(debug) cout << "power signal " <<  power_sig << endl;      
   }
   // if assuming a maxwell distribution
   else{
     
-    double binlo = f_axion;
-    double binhi = hsig ->GetBinLowEdge(binStart+1);
-    //    if(debug)
-      cout <<  "binlo = " << setprecision(10) << binlo << "\t binhi = "
-	   << setprecision(10) <<binhi << endl;
-
-  // set signal power for every bin, assuming maxwell distribution
-    //    double power_sig = fsig_wide->Integral(binlo,binhi)/bandwidth;
-    double power_sig = fsig_wide->Integral(binlo,binhi);
-    hsig->SetBinContent(binStart, power_sig);
-    double sum_signal_power = power_sig;
+    double sum_signal_power = 0;
     
-    for(int ib=binStart+1; ib <= nBins; ib++){
+    for(unsigned int ib=binStart; ib <= nBins; ib++){
 
-      binlo = hsig->GetBinLowEdge(ib);
-      binhi = hsig->GetBinLowEdge(ib+1);
+      double binlo = (ib==binStart)? f_axion: hsig->GetBinLowEdge(ib);
+      double binhi = hsig->GetBinLowEdge(ib+1);
       if(debug)
-    	cout << "binlo = " << setprecision(10) << binlo <<
+	cout << "binlo = " << setprecision(10) << binlo <<
     	  "\t binhi = " << setprecision(10) << binhi << endl;
     	
-      //   double power_for_this_bin = fsig_wide->Integral(binlo,binhi)/bandwidth;
+      // set signal power for every bin, assuming maxwell distribution
       double power_for_this_bin = fsig_wide->Integral(binlo,binhi);
-      //      cout << "power for this bin = " << power_for_this_bin  << endl;
-      sum_signal_power += power_for_this_bin;	
       hsig->SetBinContent(ib, power_for_this_bin);
+      sum_signal_power += power_for_this_bin;	
+
+      if(debug) cout << "power for this bin = " << power_for_this_bin  << endl;
     	
     } // end of loop over nBins
 
-      // if(debug)
-    cout << "resFreq = " << setprecision(10) << resFreq << "\t faxion = " << setprecision(10) << f_axion << endl;
-      cout << "sum of signal power is " << sum_signal_power << endl;
+    if(debug) cout << "sum of signal power is " << sum_signal_power << endl;
   } // if use a wider distribution
   return;
 }
@@ -169,9 +157,11 @@ void generate_signal(bool narrow, bool debug, TH1F* hsig,
 //
 // The full scanning range is lo-25 kHz to hi + 25 kHz
 
-void search001(const double lo = 749, const double hi = 751,
-	       bool narrow=false,
-	       const unsigned int nTrials=1, bool debug=false)
+void search001(bool narrow=false,
+	       bool debug=false,
+	       bool changeSeed=false,
+	       const unsigned int nTrials=1, 
+	       const double lo = 749, const double hi = 751)
 {
 
   if(S11 > 1 || fabs(S11-1)<1e-6 || S11 < 0) FATAL("S11 should be between 0 and 1");
@@ -209,8 +199,12 @@ void search001(const double lo = 749, const double hi = 751,
   TH1F* hbkg[nTrials][nSteps];
   TH1F* hmea[nTrials][nSteps];
 
-  TCanvas* c1 = new TCanvas("c1");  
-  TRandom3* gRandom= new TRandom3();
+  TCanvas* c1 = new TCanvas("c1");
+  // random number generators
+  TString number = gSystem->GetFromPipe("./random.sh");
+  UInt_t seed=number.Atoll();
+  if(debug) cout << number << "\t" << seed << endl;
+  TRandom3* gRandom= changeSeed? new TRandom3(seed): new TRandom3();
 
   // writing example output file
   string endstring = narrow? "_narrow":"_wide";
@@ -227,15 +221,14 @@ void search001(const double lo = 749, const double hi = 751,
 
     // first random peak a signal frequency
     double f_axion = lo + (hi-lo)*gRandom->Rndm();
-    //    if(debug)
-      cout << "search for a signal with frequency = " << f_axion
-		<< " MHz" << endl;
+    cout << "search for a signal with frequency = " << f_axion
+	 << " MHz" << endl;
     // now start stepping frequency in size of step_size
 
     unsigned int nSpectra=0;
     
-    //    for(unsigned int istep=0; istep<nSteps; istep++){
-    for(unsigned int istep=0; nSpectra<2; istep++){
+    for(unsigned int istep=0; istep<nSteps; istep++){
+    //    for(unsigned int istep=0; nSpectra<4; istep++){
 
       double start_freq = freq_lo + istep*step_size;
       double end_freq   = start_freq + rangeSpec;
@@ -244,7 +237,8 @@ void search001(const double lo = 749, const double hi = 751,
 	cout << "start:end frequencies = " << start_freq << "\t"
 	     << end_freq << endl;
 
-      TH1F* htemp = new TH1F("htemp","template of frequency",
+      TH1F* htemp = new TH1F(Form("htemp%03d%04d",itrial,istep),
+			     "template of frequency",
 			     nBins, start_freq, end_freq);
       htemp->SetXTitle("Frequency [MHz]");
       htemp->SetYTitle("Power [10^{-22} W]");
@@ -271,8 +265,7 @@ void search001(const double lo = 749, const double hi = 751,
 
       
       double resFreq = start_freq + 0.5*rangeSpec;
-      if(debug)
-	cout << "resonance frequency = " <<  resFreq << endl;
+      if(debug) cout << "resonance frequency = " <<  resFreq << endl;
       
       generate_signal(narrow, debug, hsig[itrial][istep], fsig, fsig_wide,
 		      f_axion, resFreq, end_freq);
@@ -283,19 +276,17 @@ void search001(const double lo = 749, const double hi = 751,
       
       if(f_axion < end_freq){
 	nSpectra++;
-	hsig[itrial][istep]->Write();
-	hsig[itrial][istep]->Draw();
-	c1->Print(Form("hsig%03d%04d.png",itrial,istep));
-      // }
-      // if(debug){
-	hbkg[itrial][istep]->Write();
-	hbkg[itrial][istep]->Draw();
-	c1->Print(Form("hbkg%03d%04d.png",itrial,istep));
-      // }
-
-      hmea[itrial][istep]->Write();
-      hmea[itrial][istep]->Draw();
-      c1->Print(Form("hmea%03d%04d.png",itrial,istep));
+	if(debug){
+	  hsig[itrial][istep]->Write();
+	  hsig[itrial][istep]->Draw();
+	  c1->Print(Form("hsig%03d%04d.png",itrial,istep));
+	  hbkg[itrial][istep]->Write();
+	  hbkg[itrial][istep]->Draw();
+	  c1->Print(Form("hbkg%03d%04d.png",itrial,istep));
+	  hmea[itrial][istep]->Write();
+	  hmea[itrial][istep]->Draw();
+	  c1->Print(Form("hmea%03d%04d.png",itrial,istep));
+	}
       }
 
 
@@ -318,11 +309,11 @@ void search001(const double lo = 749, const double hi = 751,
 
     // fill the measured grand spectrum with weighted average
     for(int ib=1; ib<= nTotalBins; ib++){
-      if(debug)cout << "delta_sum " << ib << " = " <<  delta_sum[ib-1] << endl;
-      if(debug)cout << "weight_sum " << ib << " = " <<  weight_sum[ib-1] << endl;
+      if(debug) cout << "delta_sum " << ib << " = " <<  delta_sum[ib-1] << endl;
+      if(debug) cout << "weight_sum " << ib << " = " <<  weight_sum[ib-1] << endl;
       if(weight_sum[ib]<1e-10)continue;
       double normalized = delta_sum[ib-1]/weight_sum[ib-1];
-      if(debug)cout << "normalized " << ib << " = " << normalized << endl;
+      if(debug) cout << "normalized " << ib << " = " << normalized << endl;
       htotal[itrial]->SetBinContent(ib, normalized);
     }
     htotal[itrial]->Write();
