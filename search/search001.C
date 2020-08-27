@@ -366,7 +366,9 @@ void search001(bool narrow=false,
     for(unsigned int ib=1; ib<= nTotalBins; ib++){
       // if(debug) cout << "delta_sum " << ib << " = " <<  delta_sum[ib-1] << endl;
       // if(debug) cout << "weight_sum " << ib << " = " <<  weight_sum[ib-1] << endl;
-      if(weight_sum[ib]<1e-10)continue;
+      if(weight_sum[ib-1]<1e-10)continue;
+      if(sigma2_sum[ib-1]<1e-10)continue;
+      
       double normalized = delta_sum[ib-1]/weight_sum[ib-1];
       htotal_delta[itrial]->SetBinContent(ib, normalized);
       // if(debug) cout << "normalized " << ib << " = " << normalized << endl;
