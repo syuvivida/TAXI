@@ -114,7 +114,7 @@ void generate_signal(bool narrow, bool debug, TH1F* hsig,
     // signal power for a given axion frequency and cavity resonance frequency
     double power_sig = fsig->Eval(f_axion); 
     hsig->SetBinContent(binStart,power_sig);
-    if(debug) cout << "power signal " <<  power_sig << endl;      
+    // if(debug) cout << "power signal " <<  power_sig << endl;      
   }
   // if assuming a maxwell distribution
   else{
@@ -125,16 +125,16 @@ void generate_signal(bool narrow, bool debug, TH1F* hsig,
 
       double binlo = (ib==binStart)? f_axion: hsig->GetBinLowEdge(ib);
       double binhi = hsig->GetBinLowEdge(ib+1);
-      if(debug)
-	cout << "binlo = " << setprecision(10) << binlo <<
-    	  "\t binhi = " << setprecision(10) << binhi << endl;
+      // if(debug)
+      // 	cout << "binlo = " << setprecision(10) << binlo <<
+      // 	  "\t binhi = " << setprecision(10) << binhi << endl;
     	
       // set signal power for every bin, assuming maxwell distribution
       double power_for_this_bin = fsig_wide->Integral(binlo,binhi);
       hsig->SetBinContent(ib, power_for_this_bin);
       sum_signal_power += power_for_this_bin;	
 
-      if(debug) cout << "power for this bin = " << power_for_this_bin  << endl;
+      // if(debug) cout << "power for this bin = " << power_for_this_bin  << endl;
     	
     } // end of loop over nBins
 
@@ -188,16 +188,20 @@ void search001(bool narrow=false,
   for(unsigned int is=0; is<nSteps; is++)sigmaN[is]=sigma_noise;
 
   
-  const int nTotalBins = (freq_hi-freq_lo)/bandwidth;
+  const unsigned int nTotalBins = (freq_hi-freq_lo)/bandwidth;
   TH1F* hGrand = new TH1F("hGrand","Grand spectrum",
 			  nTotalBins, freq_lo, freq_hi);
   hGrand->SetXTitle("Frequency [MHz]");
   hGrand->SetYTitle("Power [10^{-22} Watts]");
-  TH1F* htotal[nTrials];
+
+  TH1F* htotal_delta[nTrials];
+  TH1F* htotal_sigma[nTrials];
+  TH1F* htotal_SoN[nTrials];
   
   TH1F* hsig[nTrials][nSteps];
   TH1F* hbkg[nTrials][nSteps];
   TH1F* hmea[nTrials][nSteps];
+  TH1F* hSoN[nTrials][nSteps];
 
   TCanvas* c1 = new TCanvas("c1");
   // random number generators
@@ -214,10 +218,21 @@ void search001(bool narrow=false,
     
   for(unsigned int itrial=0; itrial < nTrials; itrial++){
 
-    htotal[itrial]=(TH1F*)hGrand->Clone(Form("htotal%03d",itrial));
+    htotal_delta[itrial]=(TH1F*)hGrand->Clone(Form("htotal_delta%03d",itrial));
+    htotal_delta[itrial]->SetTitle("Weighted Spectrum");
+    
+    htotal_sigma[itrial]=(TH1F*)hGrand->Clone(Form("htotal_sigma%03d",itrial));
+    htotal_sigma[itrial]->SetTitle("Standard Deviation of Weighted Sum");
+    
+    htotal_SoN[itrial]=(TH1F*)hGrand->Clone(Form("htotal_SoN%03d",itrial));
+    htotal_SoN[itrial]->SetTitle("Signal/Noise from the Weighted Spectrum");
+    htotal_SoN[itrial]->SetYTitle("");
+
     double delta_sum[nTotalBins];
-    double weight_sum[nTotalBins];      
-    for(int ib=0;ib<nTotalBins;ib++){delta_sum[ib]=0; weight_sum[ib]=0;}
+    double weight_sum[nTotalBins];
+    double sigma2_sum[nTotalBins];
+    for(unsigned int ib=0;ib<nTotalBins;ib++)
+      {delta_sum[ib]=0; weight_sum[ib]=0; sigma2_sum[ib]=0;}
 
     // first random peak a signal frequency
     double f_axion = lo + (hi-lo)*gRandom->Rndm();
@@ -227,8 +242,8 @@ void search001(bool narrow=false,
 
     unsigned int nSpectra=0;
     
-    for(unsigned int istep=0; istep<nSteps; istep++){
-    //    for(unsigned int istep=0; nSpectra<4; istep++){
+    for(unsigned int istep=0; (istep<nSteps) || (debug && nSpectra<2) ;
+	istep++){
 
       double start_freq = freq_lo + istep*step_size;
       double end_freq   = start_freq + rangeSpec;
@@ -259,6 +274,12 @@ void search001(bool narrow=false,
       hmea[itrial][istep] -> SetTitle(Form("Measured for trial %03d and "
 					   "frequency step %04d",itrial,istep));
 
+      hSoN[itrial][istep] = (TH1F*)htemp->Clone(Form("hSoN%03d%04d",
+						     itrial,istep));
+      hSoN[itrial][istep] -> SetTitle(Form("Measured S/N for trial %03d and "
+					   "frequency step %04d",itrial,istep));
+      hSoN[itrial][istep] -> SetYTitle("");
+
 
       // now generate background spectrum
       generate_background(hbkg[itrial][istep], sigmaN[istep]);
@@ -273,6 +294,24 @@ void search001(bool narrow=false,
       // add signal and background generation to get measured spectrum
       hmea[itrial][istep]->Add(hsig[itrial][istep],
 			       hbkg[itrial][istep]);
+
+      // compute the RMS over all frequency bins in each spectrum
+      double RMS_for_this_spectra=0;
+      for(int ib=1; ib <= nBins; ib++)
+	RMS_for_this_spectra += pow(hmea[itrial][istep]->GetBinContent(ib),2);
+      RMS_for_this_spectra /= nBins;
+      RMS_for_this_spectra = sqrt(RMS_for_this_spectra);
+
+      if(debug)
+	cout << "RMS for this spectra = " << RMS_for_this_spectra << "\t"
+	     << "input sigma = " << sigmaN[istep] << endl;
+
+      for(int ib=1; ib<= nBins; ib++){
+	if(RMS_for_this_spectra<1e-10)continue;
+	hSoN[itrial][istep]->SetBinContent(ib,
+	  hmea[itrial][istep]->GetBinContent(ib)/RMS_for_this_spectra);
+      }
+      
       
       if(f_axion < end_freq){
 	nSpectra++;
@@ -280,45 +319,77 @@ void search001(bool narrow=false,
 	  hsig[itrial][istep]->Write();
 	  hsig[itrial][istep]->Draw();
 	  c1->Print(Form("hsig%03d%04d.png",itrial,istep));
+
 	  hbkg[itrial][istep]->Write();
 	  hbkg[itrial][istep]->Draw();
 	  c1->Print(Form("hbkg%03d%04d.png",itrial,istep));
+
 	  hmea[itrial][istep]->Write();
 	  hmea[itrial][istep]->Draw();
 	  c1->Print(Form("hmea%03d%04d.png",itrial,istep));
+
+	  hSoN[itrial][istep]->Write();
+	  hSoN[itrial][istep]->Draw();
+	  c1->Print(Form("hSoN%03d%04d.png",itrial,istep));
+
 	}
       }
 
 
       // compute grand spectrum by adding spectra that overlapped frequencies
-      // assumed signal here is narrow signal
       
       fsig->SetParameter(0,resFreq);
+
       
+      // then assign this RMS to compute weight      
       for(int ib=1; ib <= nBins; ib++){
 	double binCenter = hmea[itrial][istep]->GetBinCenter(ib);
 	int binGrand = hGrand->FindBin(binCenter);
-	double w = fsig->Eval(binCenter)/pow(sigmaN[istep],2);
+
+	// double w = fsig->Eval(binCenter)/pow(sigmaN[istep],2);
+     	
+	double w = RMS_for_this_spectra < 1e-10? 0:
+		   fsig->Eval(binCenter)/pow(RMS_for_this_spectra,2);
+
+	double sigma2 = RMS_for_this_spectra < 1e-10? 0:
+	  pow(fsig->Eval(binCenter)/(RMS_for_this_spectra),2);
 
 	weight_sum[binGrand-1] += w;
 	delta_sum[binGrand-1] += w*hmea[itrial][istep]->GetBinContent(ib);
+	sigma2_sum[binGrand-1] += sigma2;
       }
       
 	
     } // end of loop over steps of frequency
 
     // fill the measured grand spectrum with weighted average
-    for(int ib=1; ib<= nTotalBins; ib++){
-      if(debug) cout << "delta_sum " << ib << " = " <<  delta_sum[ib-1] << endl;
-      if(debug) cout << "weight_sum " << ib << " = " <<  weight_sum[ib-1] << endl;
+    for(unsigned int ib=1; ib<= nTotalBins; ib++){
+      // if(debug) cout << "delta_sum " << ib << " = " <<  delta_sum[ib-1] << endl;
+      // if(debug) cout << "weight_sum " << ib << " = " <<  weight_sum[ib-1] << endl;
       if(weight_sum[ib]<1e-10)continue;
       double normalized = delta_sum[ib-1]/weight_sum[ib-1];
-      if(debug) cout << "normalized " << ib << " = " << normalized << endl;
-      htotal[itrial]->SetBinContent(ib, normalized);
+      htotal_delta[itrial]->SetBinContent(ib, normalized);
+      // if(debug) cout << "normalized " << ib << " = " << normalized << endl;
+
+      normalized =sqrt(sigma2_sum[ib-1])/weight_sum[ib-1];
+      htotal_sigma[itrial]->SetBinContent(ib, normalized);
+
+      double SN = delta_sum[ib-1]/sqrt(sigma2_sum[ib-1]);
+      htotal_SoN[itrial]->SetBinContent(ib, SN);
+
     }
-    htotal[itrial]->Write();
-    htotal[itrial]->Draw();
-    c1->Print(Form("htotal%03d.png",itrial));
+    htotal_delta[itrial]->Write();
+    htotal_delta[itrial]->Draw();
+    c1->Print(Form("htotal_delta%03d.png",itrial));
+
+    htotal_sigma[itrial]->Write();
+    htotal_sigma[itrial]->Draw();
+    c1->Print(Form("htotal_sigma%03d.png",itrial));
+
+    htotal_SoN[itrial]->Write();
+    htotal_SoN[itrial]->Draw();
+    c1->Print(Form("htotal_SoN%03d.png",itrial));
+
     
   } // end of loop over trials
 
