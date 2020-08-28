@@ -55,8 +55,8 @@ double P_exp(double* x, double* par)
 
 double maxwell_boltzmann(double x)
 {
-  double v = 226;
-  double func = 4*TMath::Pi()*x*x/pow(v*v*TMath::Pi(),1.5)*TMath::Exp(-x*x/v/v);
+  double v0 = 226;
+  double func = 4*TMath::Pi()*x*x/pow(v0*v0*TMath::Pi(),1.5)*TMath::Exp(-x*x/v0/v0);
   return func;
 }
 
