@@ -197,6 +197,8 @@ void search001(bool narrow=false,
   TH1F* htotal_delta[nTrials];
   TH1F* htotal_sigma[nTrials];
   TH1F* htotal_SoN[nTrials];
+
+  TH1F* htotal_rawSoN[nTrials];
   
   TH1F* hsig[nTrials][nSteps];
   TH1F* hbkg[nTrials][nSteps];
@@ -228,11 +230,25 @@ void search001(bool narrow=false,
     htotal_SoN[itrial]->SetTitle("Signal/Noise from the Weighted Spectrum");
     htotal_SoN[itrial]->SetYTitle("");
 
+    htotal_rawSoN[itrial]=(TH1F*)hGrand->Clone(Form("htotal_rawSoN%03d",itrial));
+    htotal_rawSoN[itrial]->SetTitle("Signal/Noise from the Unweighted Spectrum");
+    htotal_rawSoN[itrial]->SetYTitle("");
+
+    // for computing weighted sum
     double delta_sum[nTotalBins];
     double weight_sum[nTotalBins];
     double sigma2_sum[nTotalBins];
+
+    // for computing unweighted sum
+    double unweight_delta_sum[nTotalBins];
+    double unweight_sum[nTotalBins];
+    double unweight_sigma2_sum[nTotalBins];
+    
     for(unsigned int ib=0;ib<nTotalBins;ib++)
       {delta_sum[ib]=0; weight_sum[ib]=0; sigma2_sum[ib]=0;}
+
+    for(unsigned int ib=0;ib<nTotalBins;ib++)
+      {unweight_delta_sum[ib]=0; unweight_sum[ib]=0; unweight_sigma2_sum[ib]=0;}
 
     // first random peak a signal frequency
     double f_axion = lo + (hi-lo)*gRandom->Rndm();
@@ -357,8 +373,14 @@ void search001(bool narrow=false,
 	weight_sum[binGrand-1] += w;
 	delta_sum[binGrand-1] += w*hmea[itrial][istep]->GetBinContent(ib);
 	sigma2_sum[binGrand-1] += sigma2;
+
+	unweight_sum[binGrand-1] += 1;
+	unweight_delta_sum[binGrand-1] += hmea[itrial][istep]->GetBinContent(ib);
+	unweight_sigma2_sum[binGrand-1] += pow(RMS_for_this_spectra,2);
+
       }
-      
+
+      // hmea[itrial][istep]->Write();
 	
     } // end of loop over steps of frequency
 
@@ -379,6 +401,10 @@ void search001(bool narrow=false,
       double SN = delta_sum[ib-1]/sqrt(sigma2_sum[ib-1]);
       htotal_SoN[itrial]->SetBinContent(ib, SN);
 
+      double rawSN = unweight_delta_sum[ib-1]/sqrt(unweight_sigma2_sum[ib-1]);
+      htotal_rawSoN[itrial]->SetBinContent(ib, rawSN);
+
+
     }
     htotal_delta[itrial]->Write();
     htotal_delta[itrial]->Draw();
@@ -392,6 +418,9 @@ void search001(bool narrow=false,
     htotal_SoN[itrial]->Draw();
     c1->Print(Form("htotal_SoN%03d.png",itrial));
 
+    htotal_rawSoN[itrial]->Write();
+    htotal_rawSoN[itrial]->Draw();
+    c1->Print(Form("htotal_rawSoN%03d.png",itrial));    
     
   } // end of loop over trials
 
