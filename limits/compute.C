@@ -17,14 +17,14 @@ const double inverse_mu0pi = 0.5e7;
 const double jouelToeV=1/1.6e-19;
 
 // limit on gAgammagamma
-void computePs(const double f0=5e9,             // in Hz
-	       const double beta=1,
-	       const double B=9,                // in Tesla
-	       const double V=1e-3,             // in m^3
-	       const double Cmnl=0.5,            
-	       const double QL=50000,
-	       const double gGamma=-0.97        // KSVZ
-	       )
+double computePs(const double f0=5e9,             // in Hz
+		 const double beta=1,
+		 const double B=9,                // in Tesla
+		 const double V=1e-3,             // in m^3
+		 const double Cmnl=0.5,            
+		 const double QL=50000,
+		 const double gGamma=-0.97        // KSVZ
+		 )
 
 {
 
@@ -35,7 +35,7 @@ void computePs(const double f0=5e9,             // in Hz
     *B*B*V*Cmnl*QL;
 
   cout << "signal power = " << Psig << endl;
-  return;
+  return Psig;
   
 }
 
@@ -76,4 +76,41 @@ void computeLimit(const double significance=1.645,
 
    cout << "Upper limit on gAgammagamma = " << gAgammagamma*1e9 <<
      " GeV-1" << endl;
+ }
+
+
+
+void computeSNR(
+		const double gGamma=-0.97,        // KSVZ
+		const double f0=5e9,             // in Hz
+		const double Tsys=-1,          // in K
+		const double beta=1,
+		const double B=9,                // in Tesla
+		const double V=1e-3,             // in m^3
+		const double Cmnl=0.5,            
+		const double QL=50000,
+		const double bandwidth=5e4,      // in Hz
+		const double intT=3600,
+		const int nspec=0)          // in seconds
+ {
+
+   // here, compute fluctuation of noise power to be one photon energy
+
+   double noise_power = Tsys>0? kB*Tsys: h*f0;
+   double sigmaN=noise_power*(nspec>0? bandwidth/sqrt(nspec):
+			      sqrt(bandwidth/intT)); // in eV
+
+   cout << "sigmaN = " << sigmaN << endl;
+
+   double signal_power = computePs(f0,
+				   beta,
+				   B,
+				   V,
+				   Cmnl,            
+				   QL,
+				   gGamma        
+				   );
+   
+   cout << "Signal-to-Noise ratio = " << signal_power/noise_power << endl;
+   
  }
