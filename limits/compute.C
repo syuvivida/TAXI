@@ -16,6 +16,27 @@ const double pi= TMath::Pi();
 const double inverse_mu0pi = 0.5e7;
 const double jouelToeV=1/1.6e-19;
 
+//compute gAgammagamma
+void computegAgg(const double ma,                 // in eV
+		 const double gGamma=-0.97)       // KSVZ
+{
+  double gAgammagamma = fabs(gGamma)*alpha/pi/lambda/lambda*ma; // in eV-1
+
+  gAgammagamma *= 1e9;
+
+  cout << "gAgammagamma for ma= " << ma*1e6 << " micro eV and gGamma = "
+       << gGamma <<  " is "
+       << gAgammagamma << " GeV-1" << endl;
+
+  cout << "KSVZ gAgammagamma for ma= " << ma*1e6 << " micro eV is "
+       << 0.39*ma*1e-9 << " GeV-1" << endl;
+
+  cout << "DFSZ gAgammagamma for ma= " << ma*1e6 << " micro eV is "
+       << (0.203*8./3.-0.39)*ma*1e-9 << " GeV-1" << endl;
+
+}
+
+
 // limit on gAgammagamma
 double computePs(const double f0=5e9,             // in Hz
 		 const double beta=1,
