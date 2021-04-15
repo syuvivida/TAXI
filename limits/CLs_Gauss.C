@@ -2,6 +2,9 @@
 #include <TF1.h>
 
 // for 95% CL limits, TF1::GetX(0.05), for Gaussian distribution
+// TF1* f1 = new TF1("f1", CLs,-10,10,1);
+// f1->SetParameter(0,xxx) where xxx is (observed power - noise_mean)/sigma
+// f1->GetX(0.05) gives the 95% CL upper limit on signal power in terms of sigma
 Double_t CLs(Double_t* xx, Double_t* par){
 
   Double_t mu_s=xx[0]; // mu_s, now set mu_b=0; sigma_b=1;
