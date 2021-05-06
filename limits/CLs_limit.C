@@ -76,7 +76,7 @@ void CLs_limit(std::string inputFile, std::string treeName="data")
     hlimit->Fill(limit);
     hobs_sigma->Fill(obs_diffFromNoise_sigma);
 
-    double limit_on_gaAA = computeLimit(limit,frequency);
+    double limit_on_gaAA =  computeLimit(limit,frequency);
     y_gaAA[jentry] = limit_on_gaAA;
 
     double limit_KSVZ = computegAgg(frequency);
