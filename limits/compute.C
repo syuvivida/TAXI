@@ -43,11 +43,11 @@ double computegAgg(const double f,                 // in Hz
 // limit on gAgammagamma
 double computePs(const double f=5e9,               // scan frequency in Hz
 		 const double f0=5e9,              // resonance frequency
-		 const double beta=1,
-		 const double B=9,                // in Tesla
-		 const double V=1e-3,             // in m^3
-		 const double Cmnl=0.5,            
-		 const double QL=50000,
+		 const double beta=2,
+		 const double B=8,                // in Tesla
+		 const double V=234111e-9,             // in m^3
+		 const double Cmnl=0.65,            
+		 const double QL=30000,
 		 const double gGamma=-0.97        // KSVZ
 		 )
 
@@ -67,23 +67,25 @@ double computePs(const double f=5e9,               // scan frequency in Hz
 
 double computeLimit(const double significance=1.645,
 		  const double f=5e9,              // scan frequency
- 		  const double f0=4.732e9,        // resonance frequency in Hz
+ 		  const double f0=5e9,        // resonance frequency in Hz
  		  const double Tsys=3,          // in K
- 		  const double beta=1/3.04,
+ 		  const double beta=2,
  		  const double B=8,                // in Tesla
  		  const double V=234111e-9,             // in m^3
  		  const double Cmnl=0.65,            
- 		  const double QL=9000,
+ 		  const double QL=30000,
  		  const double bandwidth=5e3,      // in Hz
- 		  const double intT=3600,
-		  const int nspec=52443000)          // in seconds
+ 		  const double intT=18000,
+		  const double SSE=1.25,     // improvement due to frequency
+		                               // scan
+		  const int nspec=0)          // in seconds
  {
 
    // here, compute fluctuation of noise power to be one photon energy
 
    double noise_power = Tsys>0? kB*Tsys: h*f0;
    double sigmaN=noise_power*(nspec>0? bandwidth/sqrt(nspec):
-			      sqrt(bandwidth/intT)); // in eV
+			      sqrt(bandwidth/intT)/SSE); // in eV
 
    cout << "sigmaN = " << sigmaN << endl;
 
@@ -112,14 +114,15 @@ void computeSNR(
 		const double gGamma=-0.97,        // KSVZ
 		const double f=5e9,               // scan frequency
 		const double f0=5e9,             // resonance frequency in Hz
-		const double Tsys=-1,          // in K
-		const double beta=1,
-		const double B=9,                // in Tesla
-		const double V=1e-3,             // in m^3
-		const double Cmnl=0.5,            
-		const double QL=50000,
-		const double bandwidth=5e4,      // in Hz
-		const double intT=3600,
+		const double Tsys=3,          // in K
+		const double beta=2,
+		const double B=8,                // in Tesla
+		const double V=234111e-9,             // in m^3
+		const double Cmnl=0.65,            
+		const double QL=30000,
+		const double bandwidth=5e3,      // in Hz
+		const double intT=18000,
+		const double SSE=1.25,      // due to frequency scan  
 		const int nspec=0)          // in seconds
  {
 
@@ -127,8 +130,9 @@ void computeSNR(
 
    double noise_power = Tsys>0? kB*Tsys: h*f0;
    double sigmaN=noise_power*(nspec>0? bandwidth/sqrt(nspec):
-			      sqrt(bandwidth/intT)); // in eV
+			      sqrt(bandwidth/intT)/SSE); // in eV
 
+   
    cout << "sigmaN = " << sigmaN << endl;
 
    double signal_power = computePs(f,
