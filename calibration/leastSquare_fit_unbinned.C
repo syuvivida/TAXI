@@ -13,6 +13,7 @@
 #include <TPaveText.h>
 #include "TFile.h"
 #include "TGraph.h"
+#include <TLegend.h>
 
 using namespace std;
 
@@ -244,9 +245,26 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
   TGraph* gFunc = new TGraph(nDataPoints,xData,funData);  
   gFunc->SetMarkerColor(2);
   gFunc->SetLineColor(2);
+  gData->SetTitle("Step 18, 19");
+  gData->GetXaxis()->SetTitle("Time");
+  gData->GetYaxis()->SetTitle("Temperature (K)");
+  gData->Draw("AL*");
+  gFunc->Draw("L");
 
-  gFunc->Draw("AL");
-  gData->Draw("L");
+  TLegend* leg = new TLegend(0.129,0.711,0.408,0.885);
+  leg->SetFillColor(0);
+  leg->SetFillStyle(0);
+  leg->SetTextSize(0.045);
+  leg->SetBorderSize(0);
+  leg->SetFillColor(0);
+  leg->SetFillStyle(0);
+  leg->SetTextSize(0.040);
+  leg->SetBorderSize(0);
+  leg->SetHeader("Fit with order 1");
+  leg->AddEntry(gData,"Data");
+  leg->AddEntry(gFunc,"Fitted Function");
+
+  leg->Draw("same");
   
   return fitted;
 }
