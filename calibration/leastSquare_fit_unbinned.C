@@ -155,7 +155,7 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
   //--------------------------------------------------
   //init parameters for fit
   Double_t vstart[NPAR];
-  for(unsigned int i=0; i<NPAR; i++)vstart[i]=1.1;
+  for(unsigned int i=0; i<NPAR; i++)vstart[i]=0.0;
  
   TMinuit *gMinuit = new TMinuit(NPAR);  
   gMinuit->Command("SET STR 1");
@@ -229,8 +229,8 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
   // plotting
 
   TGraph* gData = new TGraph(nDataPoints,xData,yData);
-  gData->SetMarkerColor(2);
-  gData->SetLineColor(2);
+  gData->SetMarkerColor(4);
+  gData->SetLineColor(4);
   // fill the function value
   Double_t funData[nDataPoints];
   for (unsigned int i=0; i<dataColl.size(); i++ ) {
@@ -242,8 +242,8 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
   }
 
   TGraph* gFunc = new TGraph(nDataPoints,xData,funData);  
-  gFunc->SetMarkerColor(4);
-  gFunc->SetLineColor(4);
+  gFunc->SetMarkerColor(2);
+  gFunc->SetLineColor(2);
 
   gFunc->Draw("AL");
   gData->Draw("L");
