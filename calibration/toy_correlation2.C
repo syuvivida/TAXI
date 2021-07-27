@@ -18,7 +18,7 @@ void toy_correlation2(unsigned int nExp=10000){
     double x = gRandom->Gaus(1,2);    
     double y = gRandom->Gaus(2,0.5);
     double z = 2*x -3*y;
-    fout << x << " " << y << " " << z << endl;
+    fout << z << " " << x << " " << y << endl;
   }
 
   fout.close();

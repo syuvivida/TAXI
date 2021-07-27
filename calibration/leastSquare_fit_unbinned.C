@@ -4,45 +4,48 @@
 #include "TF1.h"
 #include <fstream>
 #include <iostream>
+#include <sstream>
+#include <string>
 #include <TMinuit.h>
 #include <vector>
 #include <TMath.h>
 #include "TVirtualFitter.h"
 #include <TPaveText.h>
 #include "TFile.h"
+#include "TGraph.h"
 
 using namespace std;
 
-struct myData
-{
-  Double_t x;
-  Double_t y;
-  Double_t z;
-};
 
+// global variables
 
-
-vector<myData> dataColl;
+vector<vector<Double_t>> dataColl;
 vector<Double_t> info;
 vector<Double_t> info_err;
 
-#define NPAR 5
+// number of variables, including the target variable
+unsigned int NVAR=0;
+unsigned int NORDER=0;
 
-Double_t pol1(Double_t *v, Double_t *par)
+Double_t polN(Double_t *v, Double_t *par)
 {
-  Double_t x = v[0];
-  Double_t y = v[1];
-  Double_t z = v[2];
-  Double_t value = pow(par[0]+par[1]*x+par[2]*y-z,2);
-  return value;
+  Double_t funvalue = par[0];
+
+  for(unsigned int i=0; i < NVAR; i++)
+    {
+      for(unsigned int j=1; j <= NORDER; j++)
+	{
+	  funvalue += par[j+NORDER*i]*pow(v[i+1],j);
+	}
+    }
+      
+  return funvalue;
 }
 
-Double_t pol2(Double_t *v, Double_t *par)
+Double_t DistPolN(Double_t *v, Double_t *par)
 {
-  Double_t x = v[0];
-  Double_t y = v[1];
-  Double_t z = v[2];
-  Double_t value = pow(par[0]+par[1]*x+par[2]*y+par[3]*pow(x,2)+par[4]*pow(y,2)-z,2);
+  
+  Double_t value = pow(polN(v,par) - v[0],2);
   return value;
 }
 
@@ -51,21 +54,15 @@ void fcn(Int_t &npar, Double_t *gin, Double_t &f, Double_t *par, Int_t iflag)
 {
 
   Double_t Lsum=0.;
-  Double_t Nevt=dataColl.size();
-
   
-  for ( int i=0; i<dataColl.size(); i++ ) {
+  for (unsigned int i=0; i<dataColl.size(); i++ ) {
     //PDF for signal and background
 
-    Double_t data[]
-      ={
-	dataColl[i].x,
-	dataColl[i].y,
-	dataColl[i].z
-    };
-    
+    Double_t* data = new Double_t[NVAR];
+    for(unsigned int j=0; j< NVAR; j++)
+      data[j] = dataColl[i][j];
     //Get sum of least square
-    Lsum += pol2(data,par);
+    Lsum += DistPolN(data,par);
   }
   f=Lsum;
 }
@@ -73,35 +70,85 @@ void fcn(Int_t &npar, Double_t *gin, Double_t &f, Double_t *par, Int_t iflag)
 
 
 //___________________________________________________________________________
-Double_t* Ifit(std::string dataText="toy.txt")
+Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool DEBUG=false)
 {
 
+  NORDER=order;
   dataColl.clear();
-  Double_t* fitted = new Double_t[NPAR*2];
-  for(int i=0; i<NPAR*2;i++)fitted[i]=0.0;
-  
-  FILE *infile =  fopen(dataText.data(),"r");
-  myData tmpData;
-  Double_t x, y, z;
-  int flag = 1;
-  while (flag!=-1){
-    flag =fscanf(infile,"%lf %lf %lf",&x, &y, &z);
 
-    tmpData.x = x;
-    tmpData.y = y;
-    tmpData.z = z;
-    
-    dataColl.push_back(tmpData);
-  }
+  unsigned int rows=0, cols = 0;
+  string line, item;
+
+  // count the number of variables by reading the first line
+
+  ifstream file(dataText.data());
+  while ( getline( file, line ) )
+   {
+     rows++;
+     if ( rows == 1 )                 // First row only: determine the number of columns
+       {
+         stringstream ss( line );      // Set up up a stream from this line
+         while ( ss >> item ) cols++;  // Each item delineated by spaces adds one to cols
+      }
+   }
+   file.close();
+
+   cout << "\n File has " << rows << " rows and " << cols << " columns" << endl;
+
+   NVAR= cols;
+
+   const unsigned int NPAR = (NVAR-1)*NORDER+1;
+   const unsigned int NFIT = NPAR*2;
+   // return fit result with mean and error
+   Double_t* fitted = new Double_t[NFIT];
+   for(unsigned int i=0; i<NFIT;i++)fitted[i]=0.0;
+
+   if(NORDER<1)return fitted;
+   vector<Double_t> myData;
+   ifstream fin(dataText.data());
+   const unsigned int nDataPoints=rows;
+   Double_t xData[nDataPoints];
+   Double_t yData[nDataPoints];
+   
+   for(unsigned int line=0; line < nDataPoints; line++)
+     {
+       myData.clear();
+       xData[line]=0.0;
+       yData[line]=0.0;
+       
+       for(unsigned int i=0; i < NVAR; i++)
+	 {
+	   Double_t tempVar;
+	   fin >> tempVar;
+	   myData.push_back(tempVar);
+	   if(i==0)
+	     {
+	       xData[line]=line;       
+	       yData[line]=tempVar;
+	     }
+	 }
+       dataColl.push_back(myData);
+     }
+   
 
   long int ndata = dataColl.size();
   cout << "There are " << ndata << " data points " << endl;
+
+  if(DEBUG){
+    for(unsigned int i=0; i < ndata; i++)
+      {
+	for(unsigned int j=0; j< NVAR; j++)
+	  cout << dataColl[i][j] << " ";
+	cout << endl;
+      }
+  }
+
   
   if(ndata==0) {
     printf(" ---  no evetns in the fit \n");
     return fitted;
   }
-    
+   
   int fit_status;
 
 
@@ -124,7 +171,7 @@ Double_t* Ifit(std::string dataText="toy.txt")
   Double_t step[NPAR];
   for(unsigned int i=0; i<NPAR; i++)step[i]=0.1;
 
-  for(int i=0; i<NPAR; i++){
+  for(unsigned int i=0; i<NPAR; i++){
     gMinuit->mnparm(i,  Form("p%d",i), vstart[i],  step[i], -9999,9999 , ierflg);
   }
   
@@ -179,6 +226,28 @@ Double_t* Ifit(std::string dataText="toy.txt")
       fitted[i*2+1] = errpara[i];
     }
 
+  // plotting
+
+  TGraph* gData = new TGraph(nDataPoints,xData,yData);
+  gData->SetMarkerColor(2);
+  gData->SetLineColor(2);
+  // fill the function value
+  Double_t funData[nDataPoints];
+  for (unsigned int i=0; i<dataColl.size(); i++ ) {
+    Double_t* data = new Double_t[NVAR];
+    for(unsigned int j=0; j< NVAR; j++)
+      data[j] = dataColl[i][j];
+    //Get sum of least square
+    funData[i]=polN(data,para);
+  }
+
+  TGraph* gFunc = new TGraph(nDataPoints,xData,funData);  
+  gFunc->SetMarkerColor(4);
+  gFunc->SetLineColor(4);
+
+  gFunc->Draw("AL");
+  gData->Draw("L");
+  
   return fitted;
 }
 
