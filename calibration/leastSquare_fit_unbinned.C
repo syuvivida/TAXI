@@ -2,18 +2,22 @@
 #include "TStyle.h"
 #include "TCanvas.h"
 #include "TF1.h"
+#include "TMinuit.h"
+#include "TMath.h"
+#include "TVirtualFitter.h"
+#include "TPaveText.h"
+#include "TFile.h"
+#include "TGraphErrors.h"
+#include "TGraph.h"
+#include "TLegend.h"
+#include "setTDRStyle.C"
+
 #include <fstream>
 #include <iostream>
 #include <sstream>
 #include <string>
-#include <TMinuit.h>
 #include <vector>
-#include <TMath.h>
-#include "TVirtualFitter.h"
-#include <TPaveText.h>
-#include "TFile.h"
-#include "TGraph.h"
-#include <TLegend.h>
+#include <iomanip>  
 
 using namespace std;
 
@@ -21,13 +25,12 @@ using namespace std;
 // global variables
 
 vector<vector<Double_t>> dataColl;
-vector<Double_t> info;
-vector<Double_t> info_err;
 
 // number of variables, including the target variable
 unsigned int NVAR=0;
 unsigned int NORDER=0;
 
+// return multi-variable polynomial functional values
 Double_t polN(Double_t *v, Double_t *par)
 {
   Double_t funvalue = par[0];
@@ -36,13 +39,14 @@ Double_t polN(Double_t *v, Double_t *par)
     {
       for(unsigned int j=1; j <= NORDER; j++)
 	{
-	  funvalue += par[j+NORDER*i]*pow(v[i+1],j);
+	  funvalue += (par[j+NORDER*i]*pow(v[i+1],j));
 	}
     }
       
   return funvalue;
 }
 
+// return distance between functional values and data
 Double_t DistPolN(Double_t *v, Double_t *par)
 {
   
@@ -51,6 +55,7 @@ Double_t DistPolN(Double_t *v, Double_t *par)
 }
 
 
+// sum up the distance of all data points
 void fcn(Int_t &npar, Double_t *gin, Double_t &f, Double_t *par, Int_t iflag)
 {
 
@@ -69,19 +74,21 @@ void fcn(Int_t &npar, Double_t *gin, Double_t &f, Double_t *par, Int_t iflag)
 }
 
 
-
+// Major function to call the fit and display results
 //___________________________________________________________________________
 Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool DEBUG=false)
 {
 
   NORDER=order;
   dataColl.clear();
+  setTDRStyle();
 
   unsigned int rows=0, cols = 0;
   string line, item;
 
   // count the number of variables by reading the first line
-
+  // count the amount of data points by counting the number of lines
+  
   ifstream file(dataText.data());
   while ( getline( file, line ) )
    {
@@ -192,16 +199,12 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
   printf (" -------------------------------------------- \n");
   printf("Finished.  ierr = %d \n", ierflg);
 
-  info.clear();
-  info_err.clear();
 
   double para[NPAR],errpara[NPAR];
   if ( ierflg == 0 ) 
     {
       for(unsigned int j=0; j<NPAR;j++) {
         gMinuit->GetParameter(j, para[j],errpara[j]);
-        info.push_back(para[j]);
-        info_err.push_back(errpara[j]);
         printf("Parameter  %d = %f +- %f\n",j,para[j],errpara[j]);
 	
       }
@@ -234,12 +237,14 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
   gData->SetLineColor(4);
   // fill the function value
   Double_t funData[nDataPoints];
+  Double_t ratioData[nDataPoints];
   for (unsigned int i=0; i<dataColl.size(); i++ ) {
     Double_t* data = new Double_t[NVAR];
     for(unsigned int j=0; j< NVAR; j++)
       data[j] = dataColl[i][j];
     //Get sum of least square
     funData[i]=polN(data,para);
+    ratioData[i] = funData[i]/yData[i];
   }
 
   TGraph* gFunc = new TGraph(nDataPoints,xData,funData);  
@@ -248,23 +253,68 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
   gData->SetTitle("Step 18, 19");
   gData->GetXaxis()->SetTitle("Time");
   gData->GetYaxis()->SetTitle("Temperature (K)");
+  gData->GetXaxis()->SetDecimals();
+  gData->GetYaxis()->SetDecimals();
+
+  
+  const double LABELSIZE = 20.0;
+  
+  TCanvas* c1 = new TCanvas("c1","",700,1000);
+  c1->Divide(1,2,0.01,0);
+  c1->cd(1);
+  double temp1_pad = gPad->GetWh()*gPad->GetAbsHNDC();
+  double label1_size = LABELSIZE/temp1_pad;
+  gData->GetXaxis()->SetLabelSize(label1_size);
+  gData->GetYaxis()->SetLabelSize(label1_size);
+  
+  gPad->SetTopMargin(0.01);
+  gPad->SetBottomMargin(0);
+  gPad->SetRightMargin(0.04);
   gData->Draw("AL*");
   gFunc->Draw("L");
 
-  TLegend* leg = new TLegend(0.129,0.711,0.408,0.885);
+  TLegend* leg = new TLegend(0.193,0.763,0.470,0.936);
   leg->SetFillColor(0);
   leg->SetFillStyle(0);
   leg->SetTextSize(0.045);
   leg->SetBorderSize(0);
   leg->SetFillColor(0);
   leg->SetFillStyle(0);
-  leg->SetTextSize(0.040);
+  leg->SetTextSize(0.05);
   leg->SetBorderSize(0);
   leg->SetHeader("Fit with order 1");
   leg->AddEntry(gData,"Data");
   leg->AddEntry(gFunc,"Fitted Function");
 
   leg->Draw("same");
+
+  c1->cd(2);
+  gPad->SetRightMargin(0.04);
+  gPad->SetTopMargin(0);
+  gPad->SetBottomMargin(0.2);
+  gPad->SetTickx();
+  double temp2_pad = gPad->GetWh()*gPad->GetAbsHNDC();
+  double label2_size = LABELSIZE/temp2_pad;
+
+  
+  TGraph* gRatio = new TGraph(nDataPoints,xData,ratioData);
+  gRatio->SetMarkerColor(1);
+  gRatio->SetLineColor(1);
+  gRatio->SetTitle("");
+  gRatio->GetXaxis()->SetTitle("Time");
+  gRatio->GetYaxis()->SetTitle("Fit/Data");
+  gRatio->GetXaxis()->SetLabelSize(label2_size);
+  gRatio->GetYaxis()->SetLabelSize(label2_size);
+  gRatio->GetXaxis()->SetDecimals();
+  gRatio->GetYaxis()->SetDecimals();
+  
+  gRatio->Draw("AL");
+
+  
+  c1->Print("unbinned_fit.gif");
+  c1->Print("unbinned_fit.pdf");
+
+  
   
   return fitted;
 }
