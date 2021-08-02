@@ -7,7 +7,6 @@
 #include "TVirtualFitter.h"
 #include "TPaveText.h"
 #include "TFile.h"
-#include "TGraphErrors.h"
 #include "TGraph.h"
 #include "TLegend.h"
 #include "setTDRStyle.C"
@@ -73,19 +72,14 @@ void fcn(Int_t &npar, Double_t *gin, Double_t &f, Double_t *par, Int_t iflag)
   f=Lsum;
 }
 
-
-// Major function to call the fit and display results
-//___________________________________________________________________________
-Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool DEBUG=false)
+// organizng data content
+void organizeData(std::string dataText, vector<vector<Double_t>>& thisData,
+		  vector<Double_t>& xData, vector<Double_t>& yData)
 {
-
-  NORDER=order;
-  dataColl.clear();
-  setTDRStyle();
 
   unsigned int rows=0, cols = 0;
   string line, item;
-
+  
   // count the number of variables by reading the first line
   // count the amount of data points by counting the number of lines
   
@@ -105,24 +99,13 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
 
    NVAR= cols;
 
-   const unsigned int NPAR = (NVAR-1)*NORDER+1;
-   const unsigned int NFIT = NPAR*2;
-   // return fit result with mean and error
-   Double_t* fitted = new Double_t[NFIT];
-   for(unsigned int i=0; i<NFIT;i++)fitted[i]=0.0;
-
-   if(NORDER<1)return fitted;
+   // push the data into thisData;
    vector<Double_t> myData;
    ifstream fin(dataText.data());
-   const unsigned int nDataPoints=rows;
-   Double_t xData[nDataPoints];
-   Double_t yData[nDataPoints];
    
-   for(unsigned int line=0; line < nDataPoints; line++)
+   for(unsigned int line=0; line < rows; line++)
      {
        myData.clear();
-       xData[line]=0.0;
-       yData[line]=0.0;
        
        for(unsigned int i=0; i < NVAR; i++)
 	 {
@@ -131,12 +114,140 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
 	   myData.push_back(tempVar);
 	   if(i==0)
 	     {
-	       xData[line]=line;       
-	       yData[line]=tempVar;
+	       xData.push_back(line); 
+	       yData.push_back(tempVar);
 	     }
 	 }
-       dataColl.push_back(myData);
+       thisData.push_back(myData);
      }
+
+}// end of function of organizing data
+
+
+// plotting by displaying fitting and data and also the ratio
+
+void plot(vector<vector<Double_t>>& thisData,
+	  const vector<Double_t>& xVec, const vector<Double_t>& yVec, Double_t* para, std::string fileName="unbinned_fit")
+{
+  const unsigned int nDataPoints = xVec.size();
+  cout << "nDataPoints = " << nDataPoints << endl;
+  Double_t xData[nDataPoints];
+  Double_t yData[nDataPoints];
+
+  for(unsigned int ie=0; ie<nDataPoints; ie++)
+    {
+      xData[ie] = xVec[ie];
+      yData[ie] = yVec[ie];
+    }
+  
+  TGraph* gData = new TGraph(nDataPoints, xData,yData);
+  gData->SetMarkerColor(4);
+  gData->SetLineColor(4);
+  // fill the function value
+  Double_t funData[nDataPoints];
+  Double_t ratioData[nDataPoints];
+  
+  for (unsigned int i=0; i<thisData.size(); i++ ) {
+    Double_t* data = new Double_t[NVAR];
+    for(unsigned int j=0; j< NVAR; j++)
+      data[j] = thisData[i][j];
+    //Get sum of least square
+    funData[i]  = polN(data,para);
+    ratioData[i]= funData[i]/yData[i];
+  }
+
+  TGraph* gFunc = new TGraph(nDataPoints, xData,funData);  
+  gFunc->SetMarkerColor(2);
+  gFunc->SetLineColor(2);
+  gData->SetTitle("Step 18, 19");
+  gData->GetXaxis()->SetTitle("Time");
+  gData->GetYaxis()->SetTitle("Temperature (K)");
+  gData->GetXaxis()->SetDecimals();
+  gData->GetYaxis()->SetDecimals();
+
+  
+  const double LABELSIZE = 20.0;
+  
+  TCanvas* c1 = new TCanvas(fileName.data(),"",700,1000);
+  c1->Divide(1,2,0.01,0);
+  c1->cd(1);
+  double temp1_pad = gPad->GetWh()*gPad->GetAbsHNDC();
+  double label1_size = LABELSIZE/temp1_pad;
+  gData->GetXaxis()->SetLabelSize(label1_size);
+  gData->GetYaxis()->SetLabelSize(label1_size);
+  
+  gPad->SetTopMargin(0.01);
+  gPad->SetBottomMargin(0);
+  gPad->SetRightMargin(0.04);
+  gData->Draw("AL*");
+  gFunc->Draw("L");
+
+  TLegend* leg = new TLegend(0.193,0.763,0.470,0.936);
+  leg->SetFillColor(0);
+  leg->SetFillStyle(0);
+  leg->SetTextSize(0.045);
+  leg->SetBorderSize(0);
+  leg->SetFillColor(0);
+  leg->SetFillStyle(0);
+  leg->SetTextSize(0.05);
+  leg->SetBorderSize(0);
+  leg->SetHeader("Fit with order 1");
+  leg->AddEntry(gData,"Data");
+  leg->AddEntry(gFunc,"Fitted Function");
+
+  leg->Draw("same");
+
+  c1->cd(2);
+  gPad->SetRightMargin(0.04);
+  gPad->SetTopMargin(0);
+  gPad->SetBottomMargin(0.2);
+  gPad->SetTickx();
+  double temp2_pad = gPad->GetWh()*gPad->GetAbsHNDC();
+  double label2_size = LABELSIZE/temp2_pad;
+
+  
+  TGraph* gRatio = new TGraph(nDataPoints, xData,ratioData);
+  gRatio->SetMarkerColor(1);
+  gRatio->SetLineColor(1);
+  gRatio->SetTitle("");
+  gRatio->GetXaxis()->SetTitle("Time");
+  gRatio->GetYaxis()->SetTitle("Fit/Data");
+  gRatio->GetXaxis()->SetLabelSize(label2_size);
+  gRatio->GetYaxis()->SetLabelSize(label2_size);
+  gRatio->GetXaxis()->SetDecimals();
+  gRatio->GetYaxis()->SetDecimals();
+  
+  gRatio->Draw("AL");
+
+  
+  c1->Print(Form("%s.gif",fileName.data()));
+  c1->Print(Form("%s.pdf",fileName.data()));
+ }
+
+
+
+// Major function to call the fit and display results
+//___________________________________________________________________________
+Double_t* Ifit(std::string dataText="toy.txt", std::string testText="", const unsigned int order=1, bool DEBUG=false)
+{
+  
+  NORDER=order;
+  dataColl.clear();
+  setTDRStyle();
+
+  vector<Double_t> xData;
+  vector<Double_t> yData;
+
+  // get data from the input text file
+  organizeData(dataText,dataColl,xData,yData);
+  
+  const unsigned int NPAR = (NVAR-1)*NORDER+1;
+  const unsigned int NFIT = NPAR*2;
+  // return fit result with mean and error
+  Double_t* fitted = new Double_t[NFIT];
+  for(unsigned int i=0; i<NFIT;i++)fitted[i]=0.0;
+
+  if(NORDER<1)return fitted;
    
 
   long int ndata = dataColl.size();
@@ -232,90 +343,18 @@ Double_t* Ifit(std::string dataText="toy.txt", const unsigned int order=1, bool 
 
   // plotting
 
-  TGraph* gData = new TGraph(nDataPoints,xData,yData);
-  gData->SetMarkerColor(4);
-  gData->SetLineColor(4);
-  // fill the function value
-  Double_t funData[nDataPoints];
-  Double_t ratioData[nDataPoints];
-  for (unsigned int i=0; i<dataColl.size(); i++ ) {
-    Double_t* data = new Double_t[NVAR];
-    for(unsigned int j=0; j< NVAR; j++)
-      data[j] = dataColl[i][j];
-    //Get sum of least square
-    funData[i]=polN(data,para);
-    ratioData[i] = funData[i]/yData[i];
-  }
+  plot(dataColl, xData, yData, para, "unbinned_fit");
 
-  TGraph* gFunc = new TGraph(nDataPoints,xData,funData);  
-  gFunc->SetMarkerColor(2);
-  gFunc->SetLineColor(2);
-  gData->SetTitle("Step 18, 19");
-  gData->GetXaxis()->SetTitle("Time");
-  gData->GetYaxis()->SetTitle("Temperature (K)");
-  gData->GetXaxis()->SetDecimals();
-  gData->GetYaxis()->SetDecimals();
+  if(testText.find(".txt")==std::string::npos)return fitted;
 
-  
-  const double LABELSIZE = 20.0;
-  
-  TCanvas* c1 = new TCanvas("c1","",700,1000);
-  c1->Divide(1,2,0.01,0);
-  c1->cd(1);
-  double temp1_pad = gPad->GetWh()*gPad->GetAbsHNDC();
-  double label1_size = LABELSIZE/temp1_pad;
-  gData->GetXaxis()->SetLabelSize(label1_size);
-  gData->GetYaxis()->SetLabelSize(label1_size);
-  
-  gPad->SetTopMargin(0.01);
-  gPad->SetBottomMargin(0);
-  gPad->SetRightMargin(0.04);
-  gData->Draw("AL*");
-  gFunc->Draw("L");
 
-  TLegend* leg = new TLegend(0.193,0.763,0.470,0.936);
-  leg->SetFillColor(0);
-  leg->SetFillStyle(0);
-  leg->SetTextSize(0.045);
-  leg->SetBorderSize(0);
-  leg->SetFillColor(0);
-  leg->SetFillStyle(0);
-  leg->SetTextSize(0.05);
-  leg->SetBorderSize(0);
-  leg->SetHeader("Fit with order 1");
-  leg->AddEntry(gData,"Data");
-  leg->AddEntry(gFunc,"Fitted Function");
+  vector<vector<Double_t>> testColl;
+  vector<Double_t> xTestData;
+  vector<Double_t> yTestData;
+  organizeData(testText,testColl,xTestData,yTestData);
+  plot(testColl, xTestData, yTestData, para, "unbinned_validation");
 
-  leg->Draw("same");
 
-  c1->cd(2);
-  gPad->SetRightMargin(0.04);
-  gPad->SetTopMargin(0);
-  gPad->SetBottomMargin(0.2);
-  gPad->SetTickx();
-  double temp2_pad = gPad->GetWh()*gPad->GetAbsHNDC();
-  double label2_size = LABELSIZE/temp2_pad;
-
-  
-  TGraph* gRatio = new TGraph(nDataPoints,xData,ratioData);
-  gRatio->SetMarkerColor(1);
-  gRatio->SetLineColor(1);
-  gRatio->SetTitle("");
-  gRatio->GetXaxis()->SetTitle("Time");
-  gRatio->GetYaxis()->SetTitle("Fit/Data");
-  gRatio->GetXaxis()->SetLabelSize(label2_size);
-  gRatio->GetYaxis()->SetLabelSize(label2_size);
-  gRatio->GetXaxis()->SetDecimals();
-  gRatio->GetYaxis()->SetDecimals();
-  
-  gRatio->Draw("AL");
-
-  
-  c1->Print("unbinned_fit.gif");
-  c1->Print("unbinned_fit.pdf");
-
-  
-  
   return fitted;
 }
 
