@@ -5,7 +5,7 @@ using namespace std;
 // constants for the fluctuations of noise power
 // either with kbT or hf
 const double kB=1.380649e-23; // in J*K-1
-const double h = 6.626e-34; // in J*s
+const double h = 6.62607015e-34; // in J*s
 
 // signal power
 const double hbarc= 197.327e-9; // in eV m
@@ -14,7 +14,7 @@ const double lambda = 78e6; // in eV
 const double rhoDM = 0.45e15; // in eV/m^3
 const double pi= TMath::Pi();
 const double inverse_mu0pi = 0.5e7;
-const double jouelToeV=1/1.6e-19;
+const double jouelToeV=1/1.602176634e-19;
 
 //compute gAgammagamma
 double computegAgg(const double f,                 // in Hz
@@ -41,13 +41,13 @@ double computegAgg(const double f,                 // in Hz
 
 
 // limit on gAgammagamma
-double computePs(const double f=5e9,               // scan frequency in Hz
-		 const double f0=5e9,              // resonance frequency
+double computePs(const double f=4.75e9,               // scan frequency in Hz
+		 const double f0=4.75e9,              // resonance frequency
 		 const double beta=2,
 		 const double B=8,                // in Tesla
 		 const double V=234111e-9,             // in m^3
 		 const double Cmnl=0.65,            
-		 const double QL=30000,
+		 const double QL=20000,
 		 const double gGamma=-0.97        // KSVZ
 		 )
 
@@ -73,7 +73,7 @@ double computeLimit(const double significance=1.645,
  		  const double B=8,                // in Tesla
  		  const double V=234111e-9,             // in m^3
  		  const double Cmnl=0.65,            
- 		  const double QL=30000,
+ 		  const double QL=20000,
  		  const double bandwidth=5e3,      // in Hz
  		  const double intT=18000,
 		  const double SSE=1.25,     // improvement due to frequency
@@ -84,6 +84,8 @@ double computeLimit(const double significance=1.645,
    // here, compute fluctuation of noise power to be one photon energy
 
    double noise_power = Tsys>0? kB*Tsys: h*f0;
+   cout << "noise power1 = " << kB*Tsys << endl;
+   cout << "noise power2 = " << h*f0 << endl;
    double sigmaN=noise_power*(nspec>0? bandwidth/sqrt(nspec):
 			      sqrt(bandwidth/intT)/SSE); // in eV
 
@@ -119,7 +121,7 @@ void computeSNR(
 		const double B=8,                // in Tesla
 		const double V=234111e-9,             // in m^3
 		const double Cmnl=0.65,            
-		const double QL=30000,
+		const double QL=20000,
 		const double bandwidth=5e3,      // in Hz
 		const double intT=18000,
 		const double SSE=1.25,      // due to frequency scan  
